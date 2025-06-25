@@ -27,22 +27,19 @@ jobs:
           staticcheck ./...
 
       - name: Create Release
-        uses: actions/create-release@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            ## Changes in this Release
+        run: |
+          gh release create ${{ github.ref }} \
+            --title "Release ${{ github.ref }}" \
+            --notes "## Changes in this Release
             
-            ### Features
-            - Transaction management with commit and rollback support
-            - Atomic execution of operations
-            - Storage-agnostic design
-            
-            ### Installation
-            ```bash
-            go get github.com/Pizhlo/tx-keeper@${{ github.ref }}
-            ```
-          draft: false
-          prerelease: false 
+          ### Features
+          - Transaction management with commit and rollback support
+          - Atomic execution of operations
+          - Storage-agnostic design
+          
+          ### Installation
+          \`\`\`bash
+          go get github.com/Pizhlo/tx-keeper@${{ github.ref }}
+          \`\`\`"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
