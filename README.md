@@ -38,17 +38,17 @@ import (
     "fmt"
     "log"
     
-    "github.com/Pizhlo/tx-keeper/transaction"
+    "github.com/Pizhlo/tx-keeper"
 )
 
 func main() {
     ctx := context.Background()
     
     // Create a new transaction
-    tx := transaction.NewTransaction()
+    tx := txkeeper.NewTransaction()
     
     // Define commit operations
-    commit := transaction.NewCommit(
+    commit := txkeeper.NewCommit(
         func(ctx context.Context, args ...any) error {
             fmt.Println("Executing commit operation with args:", args)
             return nil
@@ -57,7 +57,7 @@ func main() {
     )
     
     // Define rollback operations
-    rollback := transaction.NewRollback(
+    rollback := txkeeper.NewRollback(
         func(ctx context.Context, args ...any) error {
             fmt.Println("Executing rollback operation with args:", args)
             return nil
@@ -80,11 +80,11 @@ func main() {
 
 ```go
 // Create a transaction with rollback requirement
-tx := transaction.NewTransaction()
+tx := txkeeper.NewTransaction()
 
 // Add multiple commit operations
-commit := &transaction.Commit{
-    Fns: []transaction.Function{
+commit := &txkeeper.Commit{
+    Fns: []txkeeper.Function{
         {Fn: saveToDatabase, Args: []any{"user", userData}},
         {Fn: sendNotification, Args: []any{"email", emailData}},
         {Fn: updateCache, Args: []any{"user_cache", cacheData}},
@@ -92,8 +92,8 @@ commit := &transaction.Commit{
 }
 
 // Add multiple rollback operations
-rollback := &transaction.Rollback{
-    Fns: []transaction.Function{
+rollback := &txkeeper.Rollback{
+    Fns: []txkeeper.Function{
         {Fn: deleteFromDatabase, Args: []any{"user", userID}},
         {Fn: cancelNotification, Args: []any{"email", emailID}},
         {Fn: invalidateCache, Args: []any{"user_cache", userID}},
@@ -113,8 +113,8 @@ By default, tx-keeper requires a rollback function to be set before allowing com
 
 ```go
 // This will fail - no rollback function provided
-tx := transaction.NewTransaction()
-commit := transaction.NewCommit(
+tx := txkeeper.NewTransaction()
+commit := txkeeper.NewCommit(
     func(ctx context.Context, args ...any) error {
         fmt.Println("Executing commit operation")
         return nil
@@ -133,9 +133,9 @@ You can disable the rollback check requirement using the `WithNoCheckRollback` o
 
 ```go
 // Create transaction without rollback check
-tx := transaction.NewTransaction(transaction.WithNoCheckRollback())
+tx := txkeeper.NewTransaction(txkeeper.WithNoCheckRollback())
 
-commit := transaction.NewCommit(
+commit := txkeeper.NewCommit(
     func(ctx context.Context, args ...any) error {
         fmt.Println("Executing commit operation without rollback")
         return nil
@@ -211,7 +211,6 @@ The library provides specific error types for different failure scenarios:
 
 - ❌ `ErrCannotDoCommit`: Returned when trying to commit without a rollback function (when `needRollback` is true)
 - 🔄 `ErrCannotDoRollback`: Returned when trying to rollback without a rollback function
-
 
 ## 🤝 Contributing
 
