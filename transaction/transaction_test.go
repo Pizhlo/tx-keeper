@@ -20,8 +20,8 @@ func TestNew(t *testing.T) {
 	}
 
 	tests := []testCase{
-		{name: "default", opts: []Option{}, want: &Transaction{needRollback: false}},
-		{name: "with need rollback", opts: []Option{WithNeedRollback()}, want: &Transaction{needRollback: true}},
+		{name: "default", opts: []Option{}, want: &Transaction{checkRollback: true}},
+		{name: "with need rollback", opts: []Option{WithNoCheckRollback()}, want: &Transaction{checkRollback: false}},
 	}
 
 	for _, tt := range tests {
@@ -31,8 +31,9 @@ func TestNew(t *testing.T) {
 			transaction := NewTransaction(tt.opts...)
 
 			assert.NotNil(t, transaction)
-			assert.Empty(t, transaction.commit.fns)
-			assert.Empty(t, transaction.rollback.fns)
+			assert.Equal(t, tt.want.checkRollback, transaction.checkRollback)
+			assert.Empty(t, transaction.commit.Fns)
+			assert.Empty(t, transaction.rollback.Fns)
 		})
 	}
 }
@@ -44,14 +45,14 @@ func TestWithCommit(t *testing.T) {
 
 	args := []any{"1", "2", "3"}
 
-	fn := transactionFunc(func(_ context.Context, _ ...any) error {
+	fn := Func(func(_ context.Context, _ ...any) error {
 		return nil
 	})
 
-	tx.withCommit(NewCommit(fn, args...))
+	tx.WithCommit(NewCommit(fn, args...))
 
-	assert.Len(t, tx.commit.fns, 1)
-	assert.Equal(t, args, tx.commit.fns[0].args)
+	assert.Len(t, tx.commit.Fns, 1)
+	assert.Equal(t, args, tx.commit.Fns[0].Args)
 }
 
 func TestWithRollback(t *testing.T) {
@@ -61,14 +62,14 @@ func TestWithRollback(t *testing.T) {
 
 	args := []any{"1", "2", "3"}
 
-	fn := transactionFunc(func(_ context.Context, _ ...any) error {
+	fn := Func(func(_ context.Context, _ ...any) error {
 		return nil
 	})
 
-	tx.withRollback(NewRollback(fn, args...))
+	tx.WithRollback(NewRollback(fn, args...))
 
-	assert.Len(t, tx.rollback.fns, 1)
-	assert.Equal(t, args, tx.rollback.fns[0].args)
+	assert.Len(t, tx.rollback.Fns, 1)
+	assert.Equal(t, args, tx.rollback.Fns[0].Args)
 }
 
 func TestDoCommit(t *testing.T) {
@@ -76,8 +77,8 @@ func TestDoCommit(t *testing.T) {
 
 	type testCase struct {
 		name        string
-		transaction *Transaction
 		commit      Commit
+		opts        []Option
 		expectedSum int
 		wantError   bool
 		err         error
@@ -94,34 +95,32 @@ func TestDoCommit(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name:        "positive case",
-			transaction: NewTransaction(),
+			name: "positive case",
+			opts: []Option{WithNoCheckRollback()},
 			commit: Commit{
-				fns: []function{
+				Fns: []Function{
 					{
-						fn: transactionFunc(func(_ context.Context, args ...any) error {
+						Fn: Func(func(_ context.Context, args ...any) error {
 							for _, arg := range args {
 								count(arg.(int)) //nolint:forcetypeassert // we know that arg is int
 							}
 
 							return nil
 						}),
-						args: []any{1, 2, 3, 4, 5},
+						Args: []any{1, 2, 3, 4, 5},
 					},
 				},
 			},
 			expectedSum: 15,
 		},
 		{
-			name:        "negative case: need rollback, but rollback is not set",
-			transaction: &Transaction{needRollback: true},
+			name: "negative case: need rollback, but rollback is not set",
 			commit: Commit{
-				fns: []function{
+				Fns: []Function{
 					{
-						fn: transactionFunc(func(_ context.Context, _ ...any) error {
+						Fn: Func(func(_ context.Context, _ ...any) error {
 							return nil
 						}),
-						args: []any{1, 2, 3, 4, 5},
 					},
 				},
 			},
@@ -129,12 +128,12 @@ func TestDoCommit(t *testing.T) {
 			err:       ErrCannotDoCommit,
 		},
 		{
-			name:        "negative case: fn error",
-			transaction: NewTransaction(),
+			name: "negative case: fn error",
+			opts: []Option{WithNoCheckRollback()},
 			commit: Commit{
-				fns: []function{
+				Fns: []Function{
 					{
-						fn: transactionFunc(func(_ context.Context, _ ...any) error {
+						Fn: Func(func(_ context.Context, _ ...any) error {
 							return fmt.Errorf("some error")
 						}),
 					},
@@ -162,12 +161,12 @@ func TestDoCommit(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			tx := tt.transaction
+			tx := NewTransaction(tt.opts...)
 			setCount(0)
 
 			tx.commit = &tt.commit
 
-			err := tx.doCommit(t.Context())
+			err := tx.DoCommit(t.Context())
 			if tt.wantError {
 				require.Error(t, err)
 				require.EqualError(t, tt.err, err.Error())
@@ -186,7 +185,7 @@ func TestDoRollback(t *testing.T) {
 	type testCase struct {
 		name        string
 		rollback    *Rollback
-		transaction *Transaction
+		opts        []Option
 		expectedSum int
 		wantError   bool
 		err         error
@@ -203,37 +202,36 @@ func TestDoRollback(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name:        "positive case",
-			transaction: NewTransaction(),
+			name: "positive case",
+			opts: []Option{WithNoCheckRollback()},
 			rollback: &Rollback{
-				fns: []function{
+				Fns: []Function{
 					{
-						fn: transactionFunc(func(_ context.Context, args ...any) error {
+						Fn: Func(func(_ context.Context, args ...any) error {
 							for _, arg := range args {
 								count(arg.(int)) //nolint:forcetypeassert // we know that arg is int
 							}
 
 							return nil
 						}),
-						args: []any{1, 2, 3, 4, 5},
+						Args: []any{1, 2, 3, 4, 5},
 					},
 				},
 			},
 			expectedSum: 15,
 		},
 		{
-			name:        "negative case: need rollback, but rollback is not set",
-			transaction: &Transaction{},
-			wantError:   true,
-			err:         ErrCannotDoRollback,
+			name:      "negative case: need rollback, but rollback is not set",
+			wantError: true,
+			rollback:  &Rollback{},
+			err:       ErrCannotDoRollback,
 		},
 		{
-			name:        "negative case: fn error",
-			transaction: NewTransaction(),
+			name: "negative case: fn error",
 			rollback: &Rollback{
-				fns: []function{
+				Fns: []Function{
 					{
-						fn: transactionFunc(func(_ context.Context, _ ...any) error {
+						Fn: Func(func(_ context.Context, _ ...any) error {
 							return fmt.Errorf("some error")
 						}),
 					},
@@ -261,12 +259,12 @@ func TestDoRollback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			tx := tt.transaction
+			tx := NewTransaction(tt.opts...)
 			setCount(0)
 
 			tx.rollback = tt.rollback
 
-			err := tx.doRollback(t.Context())
+			err := tx.DoRollback(t.Context())
 			if tt.wantError {
 				require.Error(t, err)
 				require.EqualError(t, tt.err, err.Error())

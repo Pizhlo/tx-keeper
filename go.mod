@@ -1,4 +1,4 @@
-module tx-keeper
+module github.com/Pizhlo/tx-keeper
 
 go 1.24.2
 
