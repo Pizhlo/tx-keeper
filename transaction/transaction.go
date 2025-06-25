@@ -8,8 +8,8 @@ import (
 // Transaction represents a transaction that can be committed or rolled back.
 // It contains commit and rollback functions, and a flag to check if rollback is required.
 type Transaction struct {
-	commit   *commit   // function to call on commit.
-	rollback *rollback // function to call on rollback.
+	commit   *Commit   // function to call on commit.
+	rollback *Rollback // function to call on rollback.
 
 	needRollback bool // whether to check for rollback function presence during commit.
 }
@@ -23,21 +23,21 @@ type function struct {
 	args []any
 }
 
-// commit contains a slice of functions to be executed during commit.
-type commit struct {
+// Commit contains a slice of functions to be executed during Commit.
+type Commit struct {
 	fns []function
 }
 
-// rollback contains a slice of functions to be executed during rollback.
-type rollback struct {
+// Rollback contains a slice of functions to be executed during Rollback.
+type Rollback struct {
 	fns []function
 }
 
-// transactionOption is a function type for configuring Transaction options.
-type transactionOption func(*Transaction)
+// Option is a function type for configuring Transaction options.
+type Option func(*Transaction)
 
 // WithNeedRollback returns an option that sets the needRollback flag to true.
-func WithNeedRollback() transactionOption {
+func WithNeedRollback() Option {
 	return func(t *Transaction) {
 		t.needRollback = true
 	}
@@ -45,44 +45,42 @@ func WithNeedRollback() transactionOption {
 
 // NewTransaction creates a new Transaction with the given options.
 // By default, needRollback is set to true.
-func NewTransaction(opts ...transactionOption) *Transaction {
-	t := &Transaction{
-		needRollback: true,
-	}
+func NewTransaction(opts ...Option) *Transaction {
+	t := &Transaction{}
 
 	for _, opt := range opts {
 		opt(t)
 	}
 
-	t.commit = &commit{fns: make([]function, 0)}
-	t.rollback = &rollback{fns: make([]function, 0)}
+	t.commit = &Commit{fns: make([]function, 0)}
+	t.rollback = &Rollback{fns: make([]function, 0)}
 
 	return t
 }
 
 // NewCommit creates a new commit with a single function and its arguments.
-func NewCommit(fn transactionFunc, args ...any) *commit {
-	return &commit{
+func NewCommit(fn transactionFunc, args ...any) *Commit {
+	return &Commit{
 		fns: []function{{fn, args}},
 	}
 }
 
 // NewRollback creates a new rollback with a single function and its arguments.
-func NewRollback(fn transactionFunc, args ...any) *rollback {
-	return &rollback{
+func NewRollback(fn transactionFunc, args ...any) *Rollback {
+	return &Rollback{
 		fns: []function{{fn, args}},
 	}
 }
 
 // withCommit adds a commit function and its arguments to the transaction.
-func (t *Transaction) withCommit(commit *commit) *Transaction {
+func (t *Transaction) withCommit(commit *Commit) *Transaction {
 	t.commit = commit
 
 	return t
 }
 
 // withRollback adds a rollback function and its arguments to the transaction.
-func (t *Transaction) withRollback(rollback *rollback) *Transaction {
+func (t *Transaction) withRollback(rollback *Rollback) *Transaction {
 	t.rollback = rollback
 
 	return t
@@ -108,10 +106,10 @@ func (t *Transaction) doRollback(ctx context.Context) error {
 }
 
 // doCommit executes all functions in the commit slice and returns the first error encountered.
-func doCommit(ctx context.Context, commit *commit) error {
+func doCommit(ctx context.Context, commit *Commit) error {
 	for i, fn := range commit.fns {
 		if err := fn.fn(ctx, fn.args...); err != nil {
-			return fmt.Errorf("tx-keeper: error commit on func %d: %+v", i, err)
+			return fmt.Errorf("tx-keeper: error commit on func %d: %w", i, err)
 		}
 	}
 
@@ -119,10 +117,10 @@ func doCommit(ctx context.Context, commit *commit) error {
 }
 
 // doRollback executes all functions in the rollback slice and returns the first error encountered.
-func doRollback(ctx context.Context, rollback *rollback) error {
+func doRollback(ctx context.Context, rollback *Rollback) error {
 	for i, fn := range rollback.fns {
 		if err := fn.fn(ctx, fn.args...); err != nil {
-			return fmt.Errorf("tx-keeper: error rollback on func %d: %+v", i, err)
+			return fmt.Errorf("tx-keeper: error rollback on func %d: %w", i, err)
 		}
 	}
 

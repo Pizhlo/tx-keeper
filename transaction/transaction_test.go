@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,39 +11,40 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
+
 	type testCase struct {
 		name string
-		opts []transactionOption
+		opts []Option
 		want *Transaction
 	}
 
 	tests := []testCase{
-		{name: "default", opts: []transactionOption{}, want: &Transaction{needRollback: false}},
-		{name: "with need rollback", opts: []transactionOption{WithNeedRollback()}, want: &Transaction{needRollback: true}},
+		{name: "default", opts: []Option{}, want: &Transaction{needRollback: false}},
+		{name: "with need rollback", opts: []Option{WithNeedRollback()}, want: &Transaction{needRollback: true}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			transaction := NewTransaction(tt.opts...)
 
 			assert.NotNil(t, transaction)
 			assert.Empty(t, transaction.commit.fns)
 			assert.Empty(t, transaction.rollback.fns)
-
-			assert.Equal(t, &commit{fns: make([]function, 0)}, transaction.commit)
-			assert.Equal(t, &rollback{fns: make([]function, 0)}, transaction.rollback)
 		})
 	}
-
 }
 
 func TestWithCommit(t *testing.T) {
-	//nolint:varnamelen // стандартное название для такой переменной
+	t.Parallel()
+
 	tx := NewTransaction()
 
 	args := []any{"1", "2", "3"}
 
-	fn := transactionFunc(func(ctx context.Context, args ...any) error {
+	fn := transactionFunc(func(_ context.Context, _ ...any) error {
 		return nil
 	})
 
@@ -53,12 +55,13 @@ func TestWithCommit(t *testing.T) {
 }
 
 func TestWithRollback(t *testing.T) {
-	//nolint:varnamelen // стандартное название для такой переменной
+	t.Parallel()
+
 	tx := NewTransaction()
 
 	args := []any{"1", "2", "3"}
 
-	fn := transactionFunc(func(ctx context.Context, args ...any) error {
+	fn := transactionFunc(func(_ context.Context, _ ...any) error {
 		return nil
 	})
 
@@ -69,27 +72,36 @@ func TestWithRollback(t *testing.T) {
 }
 
 func TestDoCommit(t *testing.T) {
+	t.Parallel()
+
 	type testCase struct {
 		name        string
 		transaction *Transaction
-		commit      commit
+		commit      Commit
 		expectedSum int
 		wantError   bool
 		err         error
 	}
 
 	sum := 0
+	mu := sync.Mutex{}
+
+	count := func(n int) {
+		mu.Lock()
+		sum += n
+		mu.Unlock()
+	}
 
 	tests := []testCase{
 		{
 			name:        "positive case",
 			transaction: NewTransaction(),
-			commit: commit{
+			commit: Commit{
 				fns: []function{
 					{
-						fn: transactionFunc(func(ctx context.Context, args ...any) error {
+						fn: transactionFunc(func(_ context.Context, args ...any) error {
 							for _, arg := range args {
-								sum += arg.(int) //nolint:gosec // мы уверены, что arg - int, т.к. мы сами добавляем его в args
+								count(arg.(int)) //nolint:forcetypeassert // we know that arg is int
 							}
 
 							return nil
@@ -103,10 +115,10 @@ func TestDoCommit(t *testing.T) {
 		{
 			name:        "negative case: need rollback, but rollback is not set",
 			transaction: &Transaction{needRollback: true},
-			commit: commit{
+			commit: Commit{
 				fns: []function{
 					{
-						fn: transactionFunc(func(ctx context.Context, args ...any) error {
+						fn: transactionFunc(func(_ context.Context, _ ...any) error {
 							return nil
 						}),
 						args: []any{1, 2, 3, 4, 5},
@@ -119,10 +131,10 @@ func TestDoCommit(t *testing.T) {
 		{
 			name:        "negative case: fn error",
 			transaction: NewTransaction(),
-			commit: commit{
+			commit: Commit{
 				fns: []function{
 					{
-						fn: transactionFunc(func(ctx context.Context, args ...any) error {
+						fn: transactionFunc(func(_ context.Context, _ ...any) error {
 							return fmt.Errorf("some error")
 						}),
 					},
@@ -133,10 +145,25 @@ func TestDoCommit(t *testing.T) {
 		},
 	}
 
+	getCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return sum
+	}
+
+	setCount := func(n int) {
+		mu.Lock()
+		sum = n
+		mu.Unlock()
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tx := tt.transaction
-			sum = 0
+			setCount(0)
 
 			tx.commit = &tt.commit
 
@@ -148,15 +175,17 @@ func TestDoCommit(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectedSum, sum)
+			assert.Equal(t, tt.expectedSum, getCount())
 		})
 	}
 }
 
 func TestDoRollback(t *testing.T) {
+	t.Parallel()
+
 	type testCase struct {
 		name        string
-		rollback    *rollback
+		rollback    *Rollback
 		transaction *Transaction
 		expectedSum int
 		wantError   bool
@@ -164,17 +193,24 @@ func TestDoRollback(t *testing.T) {
 	}
 
 	sum := 0
+	mu := sync.Mutex{}
+
+	count := func(n int) {
+		mu.Lock()
+		sum += n
+		mu.Unlock()
+	}
 
 	tests := []testCase{
 		{
 			name:        "positive case",
 			transaction: NewTransaction(),
-			rollback: &rollback{
+			rollback: &Rollback{
 				fns: []function{
 					{
-						fn: transactionFunc(func(ctx context.Context, args ...any) error {
+						fn: transactionFunc(func(_ context.Context, args ...any) error {
 							for _, arg := range args {
-								sum += arg.(int) //nolint:gosec // мы уверены, что arg - int, т.к. мы сами добавляем его в args
+								count(arg.(int)) //nolint:forcetypeassert // we know that arg is int
 							}
 
 							return nil
@@ -194,10 +230,10 @@ func TestDoRollback(t *testing.T) {
 		{
 			name:        "negative case: fn error",
 			transaction: NewTransaction(),
-			rollback: &rollback{
+			rollback: &Rollback{
 				fns: []function{
 					{
-						fn: transactionFunc(func(ctx context.Context, args ...any) error {
+						fn: transactionFunc(func(_ context.Context, _ ...any) error {
 							return fmt.Errorf("some error")
 						}),
 					},
@@ -208,10 +244,25 @@ func TestDoRollback(t *testing.T) {
 		},
 	}
 
+	getCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return sum
+	}
+
+	setCount := func(n int) {
+		mu.Lock()
+		sum = n
+		mu.Unlock()
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tx := tt.transaction
-			sum = 0
+			setCount(0)
 
 			tx.rollback = tt.rollback
 
@@ -223,7 +274,7 @@ func TestDoRollback(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectedSum, sum)
+			assert.Equal(t, tt.expectedSum, getCount())
 		})
 	}
 }
