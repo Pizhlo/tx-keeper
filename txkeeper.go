@@ -1,7 +1,10 @@
 // Package txkeeper provides an abstract transaction wrapper for atomic execution of operations
 // with built-in commit and rollback support.
+//
+//nolint:gochecknoglobals
 package txkeeper
 
+//nolint:depguard
 import "github.com/Pizhlo/tx-keeper/transaction"
 
 // Transaction represents a transaction that can be committed or rolled back.
@@ -36,7 +39,7 @@ var NewCommit = transaction.NewCommit
 // NewRollback creates a new rollback with a single function and its arguments.
 var NewRollback = transaction.NewRollback
 
-// Error types
+// Error types.
 var (
 	// ErrCannotDoCommit is returned when attempting to commit a transaction but the rollback function has not been set.
 	ErrCannotDoCommit = transaction.ErrCannotDoCommit
