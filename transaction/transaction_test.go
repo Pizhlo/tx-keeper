@@ -114,7 +114,7 @@ func TestDoCommit(t *testing.T) {
 				},
 			},
 			wantError: true,
-			err:       fmt.Errorf("tx-keeper: cannot do commit. Rollback function is not set"),
+			err:       ErrCannotDoCommit,
 		},
 		{
 			name:        "negative case: fn error",
@@ -189,7 +189,7 @@ func TestDoRollback(t *testing.T) {
 			name:        "negative case: need rollback, but rollback is not set",
 			transaction: &Transaction{},
 			wantError:   true,
-			err:         fmt.Errorf("tx-keeper: cannot do rollback. Rollback function is not set"),
+			err:         ErrCannotDoRollback,
 		},
 		{
 			name:        "negative case: fn error",

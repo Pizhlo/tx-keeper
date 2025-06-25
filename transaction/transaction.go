@@ -92,7 +92,7 @@ func (t *Transaction) withRollback(rollback *rollback) *Transaction {
 // it returns an error.
 func (t *Transaction) doCommit(ctx context.Context) error {
 	if t.needRollback && t.rollback == nil {
-		return fmt.Errorf("tx-keeper: cannot do commit. Rollback function is not set")
+		return ErrCannotDoCommit
 	}
 
 	return doCommit(ctx, t.commit)
@@ -101,7 +101,7 @@ func (t *Transaction) doCommit(ctx context.Context) error {
 // doRollback executes all rollback functions. If no rollback function is set, it returns an error.
 func (t *Transaction) doRollback(ctx context.Context) error {
 	if t.rollback == nil {
-		return fmt.Errorf("tx-keeper: cannot do rollback. Rollback function is not set")
+		return ErrCannotDoRollback
 	}
 
 	return doRollback(ctx, t.rollback)
